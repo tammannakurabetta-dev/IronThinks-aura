@@ -1,0 +1,13 @@
+{
+  "name": "agri-genome-supabase-migrations",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "migrate": "node apply-migrations.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.3",
+    "@supabase/supabase-js": "^2.49.1"
+  }
+}
