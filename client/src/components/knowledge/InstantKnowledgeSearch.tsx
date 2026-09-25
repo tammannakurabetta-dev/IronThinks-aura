@@ -88,10 +88,8 @@ export const InstantKnowledgeSearch: React.FC<InstantKnowledgeSearchProps> = ({
     setIsLaunching(true);
     try {
       const created = await workflowApi.createWorkflow({
-        title: `${entity.title}: In-Depth Intelligence Briefing`,
-        topic: entity.extract.length > 80 
-          ? entity.extract.slice(0, 300) 
-          : `${entity.title} - ${entity.description || 'Comprehensive intelligence briefing and analysis.'}`,
+        title: `${entity.title}: Executive Intelligence Briefing`,
+        topic: `${entity.title} - Strategic Analysis, Benchmarks, and Future Trajectory`,
         category: 'EXECUTIVE_SCAN',
         depthLevel: 'STANDARD',
         recipients: ['exec-intel@researchflow.ai'],

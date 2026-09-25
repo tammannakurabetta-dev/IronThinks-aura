@@ -118,15 +118,28 @@ function generateFallbackStructuredResponse<T>(prompt: string, validator: z.ZodS
   // Query planning check
   if (prompt.includes('collection strategy') || prompt.includes('search queries')) {
     const topicMatch = prompt.match(/Topic:\s*"([^"]+)"/i) || prompt.match(/Topic:\s*(.*)/i);
-    const topic = topicMatch ? topicMatch[1] : 'Target Research Domain';
+    const rawTopic = topicMatch ? topicMatch[1].trim() : 'Target Research Domain';
+
+    // Extract clean, concise subject name (e.g. "Generative AI" or "CRISPR")
+    let subject = rawTopic;
+    if (subject.includes(' - ')) {
+      subject = subject.split(' - ')[0].trim();
+    } else if (subject.includes(':')) {
+      subject = subject.split(':')[0].trim();
+    } else if (subject.includes('.')) {
+      subject = subject.split('.')[0].trim();
+    }
+    if (subject.length > 50) {
+      subject = subject.slice(0, 45).trim();
+    }
 
     const fallbackPlan: QueryPlanningResponse = {
-      reFramedTopic: `Strategic Analysis and Trajectory of ${topic}`,
+      reFramedTopic: `Strategic Analysis and Trajectory of ${subject}`,
       searchQueries: [
-        `${topic} industry benchmarks and production data`,
-        `${topic} market share and technology tradeoffs 2026`,
-        `${topic} regulatory constraints and supply chain risk`,
-        `${topic} official specifications and whitepaper filings`
+        `${subject} industry benchmarks and production data`,
+        `${subject} market share and technology tradeoffs 2026`,
+        `${subject} regulatory constraints and supply chain risk`,
+        `${subject} official specifications and whitepaper filings`
       ],
       priorityEntities: [
         'Tier-1 Industry Leaders',
@@ -173,9 +186,18 @@ function extractDraftOrGenerateRevised(prompt: string): string {
 
 function generateFallbackSynthesisMarkdown(prompt: string): string {
   const topicMatch = prompt.match(/TOPIC:\s*(.*)/i);
-  const topic = topicMatch ? topicMatch[1].split('\n')[0].trim() : 'Executive Intelligence Briefing';
+  const rawTopic = topicMatch ? topicMatch[1].split('\n')[0].trim() : 'Executive Intelligence Briefing';
+  let subject = rawTopic;
+  if (subject.includes(' - ')) {
+    subject = subject.split(' - ')[0].trim();
+  } else if (subject.includes(':')) {
+    subject = subject.split(':')[0].trim();
+  }
+  if (subject.length > 50) {
+    subject = subject.slice(0, 45).trim();
+  }
 
-  return `# ${topic}: Executive Intelligence Briefing
+  return `# ${subject}: Executive Intelligence Briefing
 
 ## Executive Summary
 * **Strategic Inflection Point**: Verified data demonstrates critical commercial acceleration and technological convergence across the target sector.

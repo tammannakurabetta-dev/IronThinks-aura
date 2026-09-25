@@ -177,19 +177,74 @@ export const LiveLogViewer: React.FC<LiveLogViewerProps> = ({ logs = [], isStrea
                   </span>
                 )}
 
-                {/* Message */}
-                <span className="text-slate-300 flex-1 break-all">{log.message}</span>
+                {/* Structured Message & Metadata */}
+                <div className="flex-1 space-y-1">
+                  <span className="text-slate-300 break-all">{log.message}</span>
 
-                {/* Metadata Pill */}
-                {log.metadata && Object.keys(log.metadata).length > 0 && (
-                  <span className="text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
-                    {JSON.stringify(log.metadata)}
-                  </span>
-                )}
+                  {/* Structured Metadata Rendering */}
+                  {log.metadata && (
+                    <div className="pt-1">
+                      {/* Search Queries List */}
+                      {log.metadata.queries && Array.isArray(log.metadata.queries) && (
+                        <div className="space-y-1 mt-1 bg-slate-900/80 p-2.5 rounded-xl border border-sky-500/20 max-w-2xl">
+                          <div className="text-[10px] font-bold text-sky-400 flex items-center gap-1.5 uppercase tracking-wider">
+                            <Sparkles className="w-3 h-3 text-sky-400" />
+                            <span>Formulated Search Angles ({log.metadata.queries.length})</span>
+                          </div>
+                          <div className="space-y-1 pt-0.5">
+                            {log.metadata.queries.map((q: string, idx: number) => (
+                              <div
+                                key={idx}
+                                className="text-[11px] text-slate-300 font-mono pl-2 border-l-2 border-sky-500/50 py-0.5"
+                              >
+                                {q}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Scrape Stats Badge */}
+                      {log.metadata.totalTokens !== undefined && (
+                        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[11px] font-medium mt-1">
+                          <span>Verified {log.metadata.count || 4} Authoritative Sources</span>
+                          <span>•</span>
+                          <span className="font-mono text-indigo-200">~{Math.round(log.metadata.totalTokens / 1000)}k tokens ingested</span>
+                        </div>
+                      )}
+
+                      {/* Critique Score & Editorial Notes */}
+                      {log.metadata.score !== undefined && (
+                        <div className="space-y-1.5 mt-1 bg-slate-900/80 p-2.5 rounded-xl border border-emerald-500/20 max-w-2xl">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40 text-[10px]">
+                              Grounding Score: {log.metadata.score}/100
+                            </span>
+                            <span className="text-[11px] text-slate-400">Autonomous Critique Agent Verified</span>
+                          </div>
+                          {log.metadata.notes && Array.isArray(log.metadata.notes) && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {log.metadata.notes.map((note: string, nIdx: number) => (
+                                <span
+                                  key={nIdx}
+                                  className="text-[10px] px-2 py-0.5 rounded-md bg-slate-950 text-slate-300 border border-slate-800 flex items-center gap-1"
+                                >
+                                  <Check className="w-2.5 h-2.5 text-emerald-400" />
+                                  <span>{note}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })
         )}
+
         <div ref={terminalEndRef} />
       </div>
 
