@@ -135,6 +135,17 @@ export interface SSEMessagePayload {
   data: any;
 }
 
+export interface KnowledgeFact {
+  label: string;
+  value: string;
+  icon?: string;
+}
+
+export interface KnowledgeTakeaway {
+  label: string;
+  text: string;
+}
+
 export interface KnowledgeEntity {
   title: string;
   description?: string;
@@ -142,6 +153,13 @@ export interface KnowledgeEntity {
   thumbnailUrl?: string;
   sourceUrl: string;
   source: 'wikipedia' | 'duckduckgo' | 'combined';
+  category?: string;
+  synopsis?: string;
+  quickFacts?: KnowledgeFact[];
+  keyTakeaways?: KnowledgeTakeaway[];
+  applications?: string[];
+  significance?: string;
   relatedTopics?: Array<{ title: string; url?: string; snippet?: string }>;
   infobox?: Record<string, string>;
 }
+

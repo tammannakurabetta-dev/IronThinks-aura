@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { ADVISORY_DOMAINS } from './constants';
 
+export * from './schemas/workflow';
+
 export const SoilMetricsSchema = z.object({
   ph: z.number().min(3.0).max(11.0).optional().nullable(),
   nitrogenPpm: z.number().min(0).max(2000).optional().nullable(),

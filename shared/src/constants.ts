@@ -1,3 +1,43 @@
+/**
+ * ResearchFlow AI & Advisory Domain Constants
+ */
+
+export const RESEARCH_CATEGORIES = [
+  'MARKET_INTEL',
+  'TECH_FEASIBILITY',
+  'REGULATORY',
+  'EXECUTIVE_SCAN'
+] as const;
+
+export const DEPTH_LEVELS = [
+  'BRIEF',
+  'STANDARD',
+  'COMPREHENSIVE'
+] as const;
+
+export const PIPELINE_STAGES = [
+  'PLAN_EXPANSION',
+  'WEB_SCRAPE',
+  'SYNTHESIS',
+  'CRITIQUE_REVISE',
+  'HTML_RENDER',
+  'EMAIL_DISPATCH'
+] as const;
+
+export const STYLING_TEMPLATES = [
+  'Executive Brief',
+  'Technical Deep Dive',
+  'Market Horizon',
+  'Regulatory Memo'
+] as const;
+
+export const ADVISORY_DOMAINS = [
+  'SOIL_AND_NUTRIENT',
+  'PEST_AND_PATHOGEN',
+  'IRRIGATION_AND_WATER',
+  'CULTIVAR_AND_HARVEST'
+] as const;
+
 export const CROP_TYPES = [
   'Wheat',
   'Rice (Paddy)',
@@ -38,13 +78,5 @@ export const IRRIGATION_TYPES = [
   'Rainfed (No Supplemental Irrigation)'
 ] as const;
 
-export const ADVISORY_DOMAINS = [
-  'SOIL_AND_NUTRIENT',
-  'PEST_AND_PATHOGEN',
-  'IRRIGATION_AND_WATER',
-  'CULTIVAR_AND_HARVEST'
-] as const;
-
 export const RISK_LEVELS = ['LOW', 'MODERATE', 'HIGH', 'CRITICAL'] as const;
-
 export const USER_ROLES = ['farmer', 'agronomist', 'admin'] as const;
