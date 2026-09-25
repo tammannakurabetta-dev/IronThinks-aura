@@ -1,140 +1,205 @@
-# Agri-Genome OS: AI-Powered Agriculture Crop Advisory Assistant
+# ResearchFlow AI - Automated Multi-Step Research Workflow Manager
 
-> **Production-grade, resilient, data-driven agricultural intelligence platform powered by Gemini 2.5 Pro via `@google/genai` with strict multi-tenant Supabase PostgreSQL Row Level Security (RLS).**
-
----
-
-## 🌾 Platform Highlights
-
-- **Hyper-Local Field Parameters**: Ingestion of soil nutrient profiles (N-P-K, pH, Organic Carbon), growth phenology stages, microclimate/weather factors, and visual leaf/symptom image uploads.
-- **Strictly Typed AI Inference Engine**: Backend-isolated LLM execution using Google Gen AI SDK (`@google/genai`) targeting `gemini-2.5-pro` with rigid structured JSON schemas (`cropAdvisoryGeminiSchema`). Zero hallucination guarantee.
-- **Multi-Tenant Supabase Architecture**: Multi-tier isolation for Profiles, Farms, Plots, Advisories, and Action Items protected by comprehensive PostgreSQL Row Level Security (RLS) policies and storage buckets.
-- **Dynamic Agronomic Visualizations**:
-  - **NPKGaugeChart**: Visual stoichiometric meter representing target vs. actual Nitrogen, Phosphorus, Potassium levels with prescribed additions in kg/ha.
-  - **MoistureTimeline**: Area chart tracking evapotranspiration (ET mm/day) against soil moisture deficit with optimal watering cycles.
-  - **3-Tier Integrated Pest Management (IPM)**: Cultural, biological, and chemical interventions specifying active ingredients, dosage rates, Pre-Harvest Intervals (PHI), and mandatory PPE.
-  - **ActionItemTracker**: Interactive execution checklist where farmers mark chemical sprays or irrigation tasks as completed (`PENDING` / `DONE`).
-  - **AdvisoryPdfExportButton**: Client-side document renderer generating branded, printable agronomic dossiers.
-- **Offline-First Resilient Form Handling**: Client-side draft persistence with local storage syncing when connection drops.
+> **Production-grade, stateful, automated multi-step research workflow orchestration engine powered by Google Gemini 2.5 Pro & Flash (`@google/genai`), PostgreSQL FSM state machine with Supabase migrations, Cheerio SSRF-safe web ingestion, Juice responsive inline-CSS email compilation, and real-time Server-Sent Events (SSE) telemetry.**
 
 ---
 
-## 🏛️ System Architecture
+## ⚡ Platform Architecture & Pipeline Stages
+
+ResearchFlow AI transforms single high-level research questions into executive-grade, verified intelligence briefings dispatched via transactional email:
 
 ```
-Crop Pilot AI (agri-genome-os)/
+[ Research Prompt / Topic ]
+           │
+           ▼
+Stage 1: PLAN_EXPANSION   ──► Deconstructs into 3–5 orthogonal search vectors via gemini-2.5-flash
+           │
+           ▼
+Stage 2: WEB_SCRAPE       ──► SSRF-safe Cheerio web crawl, size & timeout caps, semantic extraction
+           │
+           ▼
+Stage 3: SYNTHESIS        ──► Deep analytical briefing compilation via gemini-2.5-pro
+           │
+           ▼
+Stage 4: CRITIQUE_REVISE  ──► Autonomous fact-checking, grounding critique, and revision
+           │
+           ▼
+   [ HUMAN-IN-THE-LOOP ]  ──► Optional approval gate (AWAITING_REVIEW) for inline markdown edits
+           │
+           ▼
+Stage 5: HTML_RENDER      ──► Semantic HTML conversion & Juice inline-CSS email compilation
+           │
+           ▼
+Stage 6: EMAIL_DISPATCH   ──► Transactional dispatch via Resend / Nodemailer (verified Ethereal sandbox)
+```
+
+---
+
+## 🚀 Key Features
+
+1. **Stateful Finite-State Machine (FSM) Engine**:
+   - Atomic state transitions: `QUEUED` ➔ `RUNNING` ➔ `AWAITING_REVIEW` ➔ `COMPLETED` / `FAILED` / `CANCELLED`.
+   - Every stage duration, input payload, output payload, and error boundary is persisted in PostgreSQL.
+2. **Dual-Model Gemini Intelligence**:
+   - **gemini-2.5-flash**: Fast query expansion, search vector formulation, and priority entity ranking.
+   - **gemini-2.5-pro**: Multi-page deep synthesis and autonomous self-critique with citation verification.
+3. **SSRF-Guarded Web Ingestion**:
+   - Enforces IP blacklisting (`127.0.0.1`, `10.0.0.0/8`, `192.168.0.0/16`, `172.16.0.0/12`, cloud metadata endpoints).
+   - 8-second request timeout caps with 2MB payload ceilings and Cheerio DOM noise stripping.
+4. **Human-in-the-Loop (HITL) Review Gate**:
+   - Halts at `AWAITING_REVIEW` prior to final dispatch.
+   - Interactive split-screen Markdown / HTML editor allows users to edit synthesized content inline.
+   - Single-click "Approve & Send Report" with celebratory confetti and automated retry on failed stages.
+5. **Mobile-Responsive Inlined Email Generator**:
+   - Juice inlines all CSS rules into email client-compliant tables (tested on Gmail, Apple Mail, Outlook).
+   - Live Desktop (680px) and Mobile (375px) iframe previewers with "Send Test Email" utility.
+6. **Real-time Server-Sent Events (SSE)**:
+   - Live streaming terminal log viewer with color-coded levels (`INFO`, `WARN`, `ERROR`, `DEBUG`).
+   - Autoscroll toggle, keyword filtering, and clipboard export.
+
+---
+
+## 🗄️ Database & Supabase Migrations
+
+The database is built on PostgreSQL with Row Level Security (RLS) policies and triggers.
+
+### Schema File
+- `supabase/migrations/001_initial_schema.sql` (24.5 KB):
+  - Enums: `workflow_status`, `step_type`, `step_status`
+  - Tables: `workflows`, `workflow_steps`, `workflow_sources`, `workflow_logs`, `workflow_templates`
+  - Indexes & `update_updated_at_column` trigger
+  - Pre-seeded with 4 default templates and 3 realistic research workflows.
+
+### Running Migrations Against Supabase
+1. **Option A (Automated Runner)**:
+   Add your database URI in `server/.env`:
+   ```bash
+   DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+   ```
+   Then run:
+   ```bash
+   npm run migrate
+   ```
+2. **Option B (Supabase Dashboard SQL Editor)**:
+   Copy the contents of `supabase/migrations/001_initial_schema.sql` and run directly in your Supabase SQL Editor.
+
+---
+
+## 🛠️ Project Structure
+
+```
+researchflow/
 ├── supabase/
 │   ├── migrations/
-│   │   └── 001_initial_schema.sql     # Full DDL: tables, enums, triggers, RLS & seed data
-│   ├── apply-migrations.js            # Node migration runner with health & schema checks
+│   │   └── 001_initial_schema.sql       # PostgreSQL DDL, RLS policies & seed data
+│   ├── apply-migrations.js              # Migration execution & health verification script
 │   └── package.json
+├── shared/
+│   └── src/
+│       ├── schemas/workflow.ts          # Zod validation schemas (bidirectional contracts)
+│       ├── types.ts                     # TypeScript interfaces & SSE message types
+│       └── index.ts
 ├── server/
 │   ├── src/
-│   │   ├── config/                    # Gemini Gen AI SDK & Supabase Client with sandbox fallback
-│   │   ├── controllers/               # Advisory (Gemini 2.5 Pro), Farm, Plot, Action Item handlers
-│   │   ├── middleware/                # Supabase JWT Auth, Rate Limiter (10 req/15min), Error Handler
-│   │   ├── routes/                    # /api/v1/advisory, /api/v1/farms, /api/v1/plots
-│   │   └── server.ts                  # Express bootstrapping with Helmet, CORS & Health endpoint
+│   │   ├── db/
+│   │   │   ├── connection.ts            # PG pool, Supabase client & in-memory fallback
+│   │   │   └── repository.ts            # Transactional workflow data access layer
+│   │   ├── lib/
+│   │   │   ├── gemini.ts                # @google/genai caller (gemini-2.5-pro / flash)
+│   │   │   ├── scraper.ts               # SSRF-guarded Cheerio web ingestion
+│   │   │   ├── emailRenderer.ts         # Markdown -> HTML + Juice CSS inliner
+│   │   │   └── email.ts                 # Resend API & Nodemailer sandbox delivery
+│   │   ├── orchestrator/
+│   │   │   ├── engine.ts                # 6-stage FSM state machine runner
+│   │   │   └── sseManager.ts            # SSE event bus & heartbeat management
+│   │   ├── routes/
+│   │   │   ├── workflows.ts             # REST & SSE streaming controllers
+│   │   │   ├── templates.ts             # Template presets controller
+│   │   │   └── settings.ts              # System health & API diagnostics
+│   │   └── server.ts                    # Express bootstrap, CORS, Helmet & rate-limiting
 │   ├── .env.example
 │   └── package.json
 ├── client/
 │   ├── src/
-│   │   ├── api/                       # API client injecting Supabase Bearer JWTs
+│   │   ├── api/workflowClient.ts        # TanStack Query client & SSE subscription hook
 │   │   ├── components/
-│   │   │   ├── charts/                # NPKGaugeChart, MoistureTimeline
-│   │   │   ├── common/                # RiskBadge, StatCard, ActionItemTracker, AdvisoryPdfExportButton
-│   │   │   ├── forms/                 # SymptomPhotoUploader (client canvas compression + storage)
-│   │   │   └── layout/                # Navbar, Sidebar, AppLayout
-│   │   ├── context/                   # AuthContext with multi-role switching (Farmer, Agronomist, Admin)
-│   │   ├── pages/                     # Dashboard, Plots, AdvisoryWizard, AdvisoryView, History, Settings, Login, Register
-│   │   └── index.css                  # Tailored Agritech styling, glassmorphism & print formatting
-│   ├── .env.example
+│   │   │   ├── layout/AppLayout.tsx     # Navigation sidebar & engine status badge
+│   │   │   ├── workflow/
+│   │   │   │   ├── WorkflowPipelineGraph.tsx # 6-stage interactive visualizer
+│   │   │   │   ├── LiveLogViewer.tsx    # Terminal log console with filters & autoscroll
+│   │   │   │   ├── SourcesGrid.tsx      # Ingested sources cards & text inspector
+│   │   │   │   └── ApprovalActionBar.tsx # HITL sign-off bar with confetti
+│   │   │   ├── preview/
+│   │   │   │   ├── MarkdownEditorPanel.tsx # Split-screen editor & live renderer
+│   │   │   │   └── EmailIframePreview.tsx  # Responsive desktop/mobile email preview
+│   │   │   └── common/StatusBadge.tsx   # Universal status badge component
+│   │   ├── pages/
+│   │   │   ├── Dashboard.tsx            # KPI metrics & recent workflows table
+│   │   │   ├── CreateWorkflow.tsx       # 4-stage pipeline configuration wizard
+│   │   │   ├── WorkflowDetail.tsx       # Live execution command center
+│   │   │   ├── Templates.tsx            # Report architecture preset browser
+│   │   │   └── Settings.tsx             # Live API verification & diagnostics
+│   │   ├── App.tsx                      # Client routing & layout wrapper
+│   │   └── index.css                    # Tailwind CSS tokens & custom scrollbars
+│   ├── index.html
 │   └── package.json
-└── shared/
-    └── src/
-        ├── constants.ts               # CROP_TYPES, SOIL_TYPES, GROWTH_STAGES, IRRIGATION_TYPES, DOMAINS
-        ├── validators.ts              # Zod validation schemas across client & server boundaries
-        └── types.ts                   # Domain contracts & Gemini 2.5 Pro JSON Schema types
+└── package.json
 ```
-
----
-
-## 🗄️ Database & PostgreSQL Migrations
-
-The database migration is located in `supabase/migrations/001_initial_schema.sql`. It defines:
-- **Custom ENUM Types**: `user_role` (`farmer`, `agronomist`, `admin`), `risk_level` (`LOW`, `MODERATE`, `HIGH`, `CRITICAL`), and `advisory_domain` (`SOIL_AND_NUTRIENT`, `PEST_AND_PATHOGEN`, `IRRIGATION_AND_WATER`, `CULTIVAR_AND_HARVEST`).
-- **5 Core Tables**: `profiles`, `farms`, `plots`, `advisories`, and `advisory_action_items`.
-- **Automatic Auth Trigger**: `handle_new_user()` populates a `profiles` row upon Supabase Auth signup.
-- **Row Level Security**: Complete multi-tenant isolation ensuring users cannot query or mutate data from other accounts.
-- **Storage Bucket**: `crop-symptoms` for high-resolution visual diagnosis imagery.
-- **Demonstration Seed Data**: Pre-configured farm, 3 distinct plots (Wheat, Tomato, Corn), and realistic agronomic advisory records.
-
-### Applying Migrations to Supabase
-
-#### Option 1: Supabase Dashboard SQL Editor (Recommended)
-1. Navigate to your [Supabase Project Dashboard](https://supabase.com/dashboard).
-2. Open the **SQL Editor** tab from the left sidebar.
-3. Copy the entire contents of [`supabase/migrations/001_initial_schema.sql`](file:///c:/Users/Tammanna/OneDrive/Desktop/Crop%20Pilot%20AI/supabase/migrations/001_initial_schema.sql) and paste into the editor.
-4. Click **Run**.
-
-#### Option 2: Automated Migration Script
-1. In `server/.env`, set `DATABASE_URL` with your Supabase direct connection string (from **Project Settings** -> **Database** -> **Connection string**):
-   ```ini
-   DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
-   ```
-2. Run the migration script:
-   ```bash
-   node supabase/apply-migrations.js
-   ```
 
 ---
 
 ## ⚙️ Environment Variables
 
-### Backend (`server/.env`)
+Configure `server/.env` (see `server/.env.example`):
+
 ```ini
-PORT=5000
+# Application Configuration
 NODE_ENV=development
+PORT=5000
+CLIENT_ORIGIN=http://localhost:5173
 
-# Supabase Credentials
+# Database (PostgreSQL / Supabase)
+DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
-# Google Gemini API Key (from https://aistudio.google.com/)
-GEMINI_API_KEY=your_gemini_api_key_here
+# Google Gemini API (@google/genai)
+GEMINI_API_KEY=your-gemini-api-key
 
-# Security
-CORS_ORIGIN=http://localhost:5173
-```
+# Email Dispatcher (resend | nodemailer | test)
+EMAIL_PROVIDER=nodemailer
+RESEND_API_KEY=re_your_resend_api_key_here
+SYSTEM_FROM_EMAIL=reports@researchflow.ai
 
-### Frontend (`client/.env`)
-```ini
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key-here
-VITE_API_BASE_URL=http://localhost:5000/api/v1
+# Web Scraping Limits & Safeguards
+MAX_CONCURRENT_SCRAPES=3
+SCRAPER_TIMEOUT_MS=8000
+MAX_SOURCE_PAGES=5
 ```
 
 ---
 
-## 🚀 Running the Application
+## 🏃 Quick Start Guide
 
 ### 1. Install Dependencies
 ```bash
 npm install
 ```
 
-### 2. Run Backend & Frontend in Development Mode
-In separate terminal windows:
+### 2. Run Database Migration
 ```bash
-# Terminal 1: Backend Express Server (Port 5000)
+npm run migrate
+```
+
+### 3. Start Development Servers
+Start both backend API and frontend client concurrently:
+
+```bash
+# Terminal 1: Backend Server (Port 5000)
 npm run dev:server
 
-# Terminal 2: Frontend Vite React App (Port 5173)
+# Terminal 2: Frontend Client (Port 5173)
 npm run dev:client
 ```
 
-### 3. Open in Browser
-Visit **`http://localhost:5173`** to access the dashboard.
-- **Instant Demo Login**: Click "Farmer", "Agronomist", or "Admin" on `/login` to access the sandbox directly without configuring third-party accounts first.
-- **AI Diagnostics**: Head to `/advisory/new`, select a plot, review the metrics across the 4 steps, and click **Execute Gemini 2.5 Pro Inference**.
-- **Action Tracking & PDF Export**: Check off tasks in the Action Item checklist or click **Export Official PDF** to print or save the advisory dossier.
+Open your browser at **`http://localhost:5173`** to access the ResearchFlow AI dashboard.

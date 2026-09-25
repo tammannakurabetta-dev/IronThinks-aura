@@ -1,7 +1,7 @@
 -- ==============================================================================
--- AGRI-GENOME OS - SUPABASE POSTGRESQL INITIAL SCHEMA MIGRATION
+-- RESEARCHFLOW AI - SUPABASE / POSTGRESQL PRODUCTION INITIAL SCHEMA MIGRATION
 -- Migration: 001_initial_schema.sql
--- Description: Core tables, enums, indexes, RLS policies, storage bucket, triggers & seed data
+-- Description: Core workflow engine tables, enums, triggers, RLS policies & seed data
 -- ==============================================================================
 
 -- 1. Enable Required Extensions
@@ -10,451 +10,334 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 2. Define Custom Types / Enums
 DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-        CREATE TYPE user_role AS ENUM ('farmer', 'agronomist', 'admin');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'workflow_status') THEN
+        CREATE TYPE workflow_status AS ENUM (
+            'DRAFT',
+            'QUEUED',
+            'RUNNING',
+            'AWAITING_REVIEW',
+            'COMPLETED',
+            'FAILED',
+            'CANCELLED'
+        );
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'risk_level') THEN
-        CREATE TYPE risk_level AS ENUM ('LOW', 'MODERATE', 'HIGH', 'CRITICAL');
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'step_type') THEN
+        CREATE TYPE step_type AS ENUM (
+            'PLAN_EXPANSION',
+            'WEB_SCRAPE',
+            'SYNTHESIS',
+            'CRITIQUE_REVISE',
+            'HTML_RENDER',
+            'EMAIL_DISPATCH'
+        );
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'advisory_domain') THEN
-        CREATE TYPE advisory_domain AS ENUM ('SOIL_AND_NUTRIENT', 'PEST_AND_PATHOGEN', 'IRRIGATION_AND_WATER', 'CULTIVAR_AND_HARVEST');
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'step_status') THEN
+        CREATE TYPE step_status AS ENUM (
+            'PENDING',
+            'IN_PROGRESS',
+            'COMPLETED',
+            'FAILED',
+            'SKIPPED'
+        );
     END IF;
 END $$;
 
--- 3. Profiles Table
-CREATE TABLE IF NOT EXISTS profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    full_name TEXT NOT NULL,
-    role user_role DEFAULT 'farmer'::user_role NOT NULL,
-    phone_number TEXT,
-    preferred_language TEXT DEFAULT 'en' NOT NULL,
-    measurement_system TEXT DEFAULT 'metric' NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-);
-
--- 4. Farms Table
-CREATE TABLE IF NOT EXISTS farms (
+-- 3. Core Workflows Table
+CREATE TABLE IF NOT EXISTS workflows (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    farm_name TEXT NOT NULL,
-    location_latitude NUMERIC(10, 7),
-    location_longitude NUMERIC(10, 7),
-    state_province TEXT NOT NULL,
-    country TEXT NOT NULL,
-    total_acreage NUMERIC(10, 2) NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    user_id UUID,
+    title VARCHAR(255) NOT NULL,
+    topic TEXT NOT NULL,
+    category VARCHAR(64) NOT NULL DEFAULT 'EXECUTIVE_SCAN',
+    depth_level VARCHAR(32) NOT NULL DEFAULT 'STANDARD',
+    status workflow_status NOT NULL DEFAULT 'QUEUED',
+    require_approval BOOLEAN NOT NULL DEFAULT TRUE,
+    recipients JSONB NOT NULL DEFAULT '[]'::jsonb,
+    configuration JSONB NOT NULL DEFAULT '{}'::jsonb,
+    
+    -- Content Artifacts
+    raw_synthesis_markdown TEXT,
+    revised_synthesis_markdown TEXT,
+    final_html_report TEXT,
+    
+    -- Execution Metadata
+    current_step_index INT NOT NULL DEFAULT 0,
+    total_steps INT NOT NULL DEFAULT 6,
+    error_message TEXT,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- 5. Plots Table
-CREATE TABLE IF NOT EXISTS plots (
+-- 4. Individual Step Executions
+CREATE TABLE IF NOT EXISTS workflow_steps (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
-    plot_name TEXT NOT NULL,
-    soil_type TEXT NOT NULL,
-    acreage NUMERIC(10, 2) NOT NULL,
-    current_crop TEXT,
-    sowing_date DATE,
-    irrigation_type TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    step_type step_type NOT NULL,
+    step_order INT NOT NULL,
+    status step_status NOT NULL DEFAULT 'PENDING',
+    input_payload JSONB,
+    output_payload JSONB,
+    error_details TEXT,
+    duration_ms INT,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_workflow_step UNIQUE(workflow_id, step_order)
 );
 
--- 6. Advisories Table
-CREATE TABLE IF NOT EXISTS advisories (
+-- 5. Scraped Web Sources & Extracted Text
+CREATE TABLE IF NOT EXISTS workflow_sources (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    plot_id UUID NOT NULL REFERENCES plots(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    domain advisory_domain NOT NULL,
-    input_parameters JSONB NOT NULL,
-    ai_raw_response JSONB NOT NULL,
-    executive_summary TEXT NOT NULL,
-    overall_risk_level risk_level NOT NULL,
-    confidence_score NUMERIC(5, 2) NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    title TEXT,
+    snippet TEXT,
+    extracted_text TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'FETCHED',
+    http_status_code INT,
+    tokens_estimate INT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- 7. Advisory Action Items (Normalized for actionable queries)
-CREATE TABLE IF NOT EXISTS advisory_action_items (
+-- 6. Real-time Execution Logs
+CREATE TABLE IF NOT EXISTS workflow_logs (
+    id BIGSERIAL PRIMARY KEY,
+    workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    step_type step_type,
+    log_level VARCHAR(16) NOT NULL DEFAULT 'INFO',
+    message TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- 7. Workflow & Email Templates
+CREATE TABLE IF NOT EXISTS workflow_templates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    advisory_id UUID NOT NULL REFERENCES advisories(id) ON DELETE CASCADE,
-    category TEXT NOT NULL,
-    action_text TEXT NOT NULL,
-    urgency_days INT NOT NULL,
-    status TEXT DEFAULT 'PENDING' NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(64) NOT NULL DEFAULT 'EXECUTIVE_SCAN',
+    description TEXT NOT NULL,
+    prompt_override TEXT,
+    styling_config JSONB DEFAULT '{}'::jsonb,
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- 8. Create Indexes for Performance
-CREATE INDEX IF NOT EXISTS idx_farms_user_id ON farms(user_id);
-CREATE INDEX IF NOT EXISTS idx_plots_farm_id ON plots(farm_id);
-CREATE INDEX IF NOT EXISTS idx_advisories_plot_id ON advisories(plot_id);
-CREATE INDEX IF NOT EXISTS idx_advisories_user_id ON advisories(user_id);
-CREATE INDEX IF NOT EXISTS idx_advisories_created_at ON advisories(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_action_items_advisory_id ON advisory_action_items(advisory_id);
-CREATE INDEX IF NOT EXISTS idx_action_items_status ON advisory_action_items(status);
+-- 8. Indexes for Performance & Active Query Polling
+CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status);
+CREATE INDEX IF NOT EXISTS idx_workflows_created_at ON workflows(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workflow_steps_lookup ON workflow_steps(workflow_id, step_order);
+CREATE INDEX IF NOT EXISTS idx_workflow_logs_wf_id ON workflow_logs(workflow_id, id ASC);
+CREATE INDEX IF NOT EXISTS idx_workflow_sources_wf_id ON workflow_sources(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_templates_category ON workflow_templates(category);
 
--- 9. Auto-trigger for Profiles when an Auth User signs up
-CREATE OR REPLACE FUNCTION public.handle_new_user()
+-- 9. Trigger for updated_at timestamps
+CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.profiles (id, full_name, role, phone_number, preferred_language, measurement_system)
-    VALUES (
-        NEW.id,
-        COALESCE(NEW.raw_user_meta_data->>'full_name', 'Agri-Genome Farmer'),
-        COALESCE((NEW.raw_user_meta_data->>'role')::user_role, 'farmer'::user_role),
-        NEW.raw_user_meta_data->>'phone_number',
-        COALESCE(NEW.raw_user_meta_data->>'preferred_language', 'en'),
-        COALESCE(NEW.raw_user_meta_data->>'measurement_system', 'metric')
-    )
-    ON CONFLICT (id) DO UPDATE
-    SET 
-        full_name = EXCLUDED.full_name,
-        role = EXCLUDED.role;
+    NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ language 'plpgsql';
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+DROP TRIGGER IF EXISTS trg_workflows_updated_at ON workflows;
+CREATE TRIGGER trg_workflows_updated_at
+    BEFORE UPDATE ON workflows
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 
--- 10. Enable Row Level Security (RLS) across all tables
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE farms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE plots ENABLE ROW LEVEL SECURITY;
-ALTER TABLE advisories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE advisory_action_items ENABLE ROW LEVEL SECURITY;
+-- 10. Row Level Security (RLS) Configuration
+ALTER TABLE workflows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow_steps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow_templates ENABLE ROW LEVEL SECURITY;
 
--- 11. Row Level Security Policies
--- Profiles: Users manage their own profile
-DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
-CREATE POLICY "Users can view their own profile"
-    ON profiles FOR SELECT
-    USING (auth.uid() = id);
+-- Allow permissive access for application service role & public development demo
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "Public workflows access" ON workflows;
+    CREATE POLICY "Public workflows access" ON workflows FOR ALL USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
-CREATE POLICY "Users can update their own profile"
-    ON profiles FOR UPDATE
-    USING (auth.uid() = id);
+    DROP POLICY IF EXISTS "Public workflow_steps access" ON workflow_steps;
+    CREATE POLICY "Public workflow_steps access" ON workflow_steps FOR ALL USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Users can insert their own profile" ON profiles;
-CREATE POLICY "Users can insert their own profile"
-    ON profiles FOR INSERT
-    WITH CHECK (auth.uid() = id);
+    DROP POLICY IF EXISTS "Public workflow_sources access" ON workflow_sources;
+    CREATE POLICY "Public workflow_sources access" ON workflow_sources FOR ALL USING (true) WITH CHECK (true);
 
--- Farms: Data isolation by auth.uid()
-DROP POLICY IF EXISTS "Users can perform all CRUD on their farms" ON farms;
-CREATE POLICY "Users can perform all CRUD on their farms"
-    ON farms FOR ALL
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
+    DROP POLICY IF EXISTS "Public workflow_logs access" ON workflow_logs;
+    CREATE POLICY "Public workflow_logs access" ON workflow_logs FOR ALL USING (true) WITH CHECK (true);
 
--- Plots: Data isolation via ownership of parent farm
-DROP POLICY IF EXISTS "Users can access plots in their farms" ON plots;
-CREATE POLICY "Users can access plots in their farms"
-    ON plots FOR ALL
-    USING (
-        EXISTS (SELECT 1 FROM farms WHERE farms.id = plots.farm_id AND farms.user_id = auth.uid())
+    DROP POLICY IF EXISTS "Public workflow_templates access" ON workflow_templates;
+    CREATE POLICY "Public workflow_templates access" ON workflow_templates FOR ALL USING (true) WITH CHECK (true);
+END $$;
+
+-- 11. Seed Workflow Templates
+INSERT INTO workflow_templates (id, name, category, description, prompt_override, styling_config, is_default)
+VALUES 
+    (
+        '10000000-0000-0000-0000-000000000001',
+        'Executive Horizon Briefing',
+        'EXECUTIVE_SCAN',
+        'Distills strategic macro shifts, high-level business risks, and 30-60-90 day horizon action items into an authoritative c-suite summary.',
+        'Emphasize strategic risk, executive capital allocations, and organizational impacts.',
+        '{"accentColor": "#0284c7", "headerBanner": true, "showConfidenceScore": true}'::jsonb,
+        TRUE
+    ),
+    (
+        '10000000-0000-0000-0000-000000000002',
+        'Technical & Architectural Deep-Dive',
+        'TECH_FEASIBILITY',
+        'Focuses on engineering tradeoffs, benchmarks, system throughput, and implementation hurdles for engineering leads.',
+        'Incorporate architectural tradeoffs, benchmark tables, and code/spec citations.',
+        '{"accentColor": "#10b981", "headerBanner": true, "showConfidenceScore": true}'::jsonb,
+        FALSE
+    ),
+    (
+        '10000000-0000-0000-0000-000000000003',
+        'Market & Competitive Intel Tear-Down',
+        'MARKET_INTEL',
+        'Structured competitive matrix analyzing vendor market share, product differentials, pricing models, and SWOT profiles.',
+        'Structure findings around competitor head-to-head comparisons and market sizing figures.',
+        '{"accentColor": "#8b5cf6", "headerBanner": true, "showConfidenceScore": true}'::jsonb,
+        FALSE
+    ),
+    (
+        '10000000-0000-0000-0000-000000000004',
+        'Regulatory & Compliance Sentinel',
+        'REGULATORY',
+        'Tracks international policy statutes, enforcement penalties, and legal risk disclosures.',
+        'Prioritize statutory citations, legal liabilities, and compliance deadlines.',
+        '{"accentColor": "#f59e0b", "headerBanner": true, "showConfidenceScore": true}'::jsonb,
+        FALSE
     )
-    WITH CHECK (
-        EXISTS (SELECT 1 FROM farms WHERE farms.id = plots.farm_id AND farms.user_id = auth.uid())
-    );
-
--- Advisories: Isolation by direct user_id reference
-DROP POLICY IF EXISTS "Users can manage their advisories" ON advisories;
-CREATE POLICY "Users can manage their advisories"
-    ON advisories FOR ALL
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
-
--- Advisory Action Items: Isolation through parent advisory
-DROP POLICY IF EXISTS "Users can access action items for their advisories" ON advisory_action_items;
-CREATE POLICY "Users can access action items for their advisories"
-    ON advisory_action_items FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM advisories 
-            WHERE advisories.id = advisory_action_items.advisory_id 
-              AND advisories.user_id = auth.uid()
-        )
-    )
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM advisories 
-            WHERE advisories.id = advisory_action_items.advisory_id 
-              AND advisories.user_id = auth.uid()
-        )
-    );
-
--- 12. Storage Bucket for Crop Symptoms
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('crop-symptoms', 'crop-symptoms', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Storage bucket access policies
-DROP POLICY IF EXISTS "Authenticated users can upload crop symptoms" ON storage.objects;
-CREATE POLICY "Authenticated users can upload crop symptoms"
-    ON storage.objects FOR INSERT
-    TO authenticated
-    WITH CHECK (bucket_id = 'crop-symptoms');
+-- 12. Seed Demonstrative Workflows
 
-DROP POLICY IF EXISTS "Public can view crop symptoms" ON storage.objects;
-CREATE POLICY "Public can view crop symptoms"
-    ON storage.objects FOR SELECT
-    USING (bucket_id = 'crop-symptoms');
+-- Workflow A: COMPLETED run
+INSERT INTO workflows (
+    id,
+    title,
+    topic,
+    category,
+    depth_level,
+    status,
+    require_approval,
+    recipients,
+    configuration,
+    raw_synthesis_markdown,
+    revised_synthesis_markdown,
+    final_html_report,
+    current_step_index,
+    total_steps,
+    started_at,
+    completed_at
+) VALUES (
+    '20000000-0000-0000-0000-000000000001',
+    'Solid-State Battery Commercialization Q1 2026',
+    'Commercial manufacturing milestones, energy density breakthroughs, and automotive OEM adoption timelines for all-solid-state lithium batteries in 2026.',
+    'MARKET_INTEL',
+    'STANDARD',
+    'COMPLETED',
+    TRUE,
+    '["exec-intel@researchflow.ai", "lead-analyst@energyventures.com"]'::jsonb,
+    '{"stylingTemplate": "Executive Brief", "accentColor": "#0284c7"}'::jsonb,
+    '# Solid-State Battery Commercialization: 2026 Outlook\n\n## Executive Summary\n* Multiple Tier-1 automakers are entering pilot line validation for all-solid-state cells (ASSBs).\n* Projected gravimetric densities now surpass 450 Wh/kg in test pouches.',
+    '# Solid-State Battery Commercialization: Q1 2026 Executive Intelligence Brief\n\n## Executive Summary\n* **Pilot-Line Transition**: Tier-1 automotive partnerships (Toyota-Idemitsu, QuantumScape-VW PowerCo) have commenced pre-commercial pilot line operations in Q1 2026, targeting initial low-volume vehicle integration by late 2027.\n* **Energy Density Benchmark**: Certified pouch-cell testing demonstrates gravimetric energy densities reaching 460 Wh/kg and volumetric density of 1,050 Wh/L, representing a 65% improvement over commercial NMC811 cells.\n* **Thermal Safety Verification**: Non-flammable sulfide-based and oxide electrolytes show zero thermal runaway propagation under nail-penetration testing up to 180°C.\n* **Manufacturing Bottlenecks**: Ceramic electrolyte separator brittleness and roll-to-roll continuous sintering yields remain the primary cost barriers, currently sustaining cell costs above $135/kWh.\n\n## Strategic Context & Key Drivers\nThe global push toward high-range electric vehicles (EVs) and eVTOL urban air mobility has catalyzed capital concentration into solid-state battery (SSB) manufacturing. Traditional liquid-electrolyte lithium-ion systems are approaching their thermodynamic energy ceiling (~300 Wh/kg). SSB chemistry represents the critical paradigm shift to eliminate liquid volatile solvents while accommodating pure lithium-metal anodes.\n\n## Deep-Dive Competitive Analysis\n\n| Manufacturer | Electrolyte Chemistry | Gravimetric Density | Stated OEM Partner | Target Volume Production |\n|---|---|---|---|---|\n| **QuantumScape** | Anode-Free Sulfide / Ceramic | 450 Wh/kg | Volkswagen PowerCo | 2027-2028 |\n| **Toyota / Idemitsu** | Sulfide-based Solid Electrolyte | 480 Wh/kg | Toyota Motor Corp | Late 2027 |\n| **Solid Power** | Sulfide Solid Electrolyte | 390 Wh/kg | BMW / Ford | 2027 |\n| **CATL** | Condensed / Semi-Solid | 500 Wh/kg | Internal / Global OEMs | 2026 Pilot |\n\n## Critical Risks & Unresolved Questions\n1. **Continuous Sintering Yields**: Defect rates during thin-film electrolyte sintering remain higher than liquid battery standards, risking cost parity targets.\n2. **Lithium Dendrite Growth Under High C-Rates**: Fast-charging (>4C) at sub-zero temperatures still induces microscopic intergranular dendrite propagation in ceramic separators.\n3. **Supply Chain Scarcity for High-Purity Lithium Sulfide**: Upstream chemical precursor capacity for Li2S is concentrated among fewer than 4 global processors.\n\n## Strategic Recommendations & Action Items\n* **30-Day**: Audit battery raw material procurement exposure to high-purity lithium sulfide suppliers.\n* **60-Day**: Evaluate joint development agreements (JDAs) with cathode active material suppliers optimized for high-voltage solid electrolytes.\n* **90-Day**: Establish benchmarking protocols for second-generation silicon-dominant vs. lithium-metal anode solid-state cells.\n\n## Source Index & Confidence Assessment\n* QuantumScape PowerCo Industrialization Filing (High Confidence)\n* Toyota Motor Manufacturing Technology Bulletin Q1 2026 (High Confidence)\n* US Department of Energy Battery500 Progress Report (Very High Confidence)',
+    '<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 24px;"><div style="max-width: 680px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; padding: 32px; border: 1px solid #334155;"><h1 style="color: #38bdf8; font-size: 24px; margin-bottom: 16px;">Solid-State Battery Commercialization: Q1 2026 Executive Intelligence Brief</h1><div style="background-color: #0369a1; padding: 16px; border-radius: 8px; margin-bottom: 24px;"><h3 style="margin-top: 0; color: #ffffff;">Executive Summary</h3><ul style="margin: 0; padding-left: 20px; color: #e0f2fe;"><li>Tier-1 automakers entering pilot line validation for all-solid-state cells.</li><li>Projected gravimetric densities reach 460 Wh/kg with 0% thermal runaway propagation.</li></ul></div><p style="color: #94a3b8; font-size: 14px;">Dispatched via ResearchFlow AI Automated Engine</p></div></body></html>',
+    6,
+    6,
+    NOW() - INTERVAL '2 hours',
+    NOW() - INTERVAL '1 hour 55 minutes'
+) ON CONFLICT (id) DO NOTHING;
 
-DROP POLICY IF EXISTS "Users can delete their own uploaded symptoms" ON storage.objects;
-CREATE POLICY "Users can delete their own uploaded symptoms"
-    ON storage.objects FOR DELETE
-    TO authenticated
-    USING (bucket_id = 'crop-symptoms' AND auth.uid()::text = (storage.foldername(name))[1]);
+-- Seed Steps for Workflow A
+INSERT INTO workflow_steps (workflow_id, step_type, step_order, status, duration_ms, started_at, completed_at, input_payload, output_payload)
+VALUES
+    ('20000000-0000-0000-0000-000000000001', 'PLAN_EXPANSION', 1, 'COMPLETED', 1420, NOW() - INTERVAL '2 hours', NOW() - INTERVAL '1 hour 59 minutes', '{"topic": "Solid-State Battery Commercialization Q1 2026"}'::jsonb, '{"searchQueries": ["solid-state battery pilot production 2026", "QuantumScape Volkswagen PowerCo validation data", "automotive all-solid-state battery Wh/kg benchmark", "sulfide electrolyte manufacturing bottleneck"]}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'WEB_SCRAPE', 2, 'COMPLETED', 3850, NOW() - INTERVAL '1 hour 59 minutes', NOW() - INTERVAL '1 hour 58 minutes', '{"concurrency": 3}'::jsonb, '{"pagesFetched": 4, "totalTokens": 14200}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'SYNTHESIS', 3, 'COMPLETED', 6200, NOW() - INTERVAL '1 hour 58 minutes', NOW() - INTERVAL '1 hour 57 minutes', '{"model": "gemini-2.5-pro"}'::jsonb, '{"markdownLength": 2480}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'CRITIQUE_REVISE', 4, 'COMPLETED', 5100, NOW() - INTERVAL '1 hour 57 minutes', NOW() - INTERVAL '1 hour 56 minutes', '{"model": "gemini-2.5-pro"}'::jsonb, '{"factualAccuracyScore": 96, "structuralIntegrityScore": 94, "critiqueNotes": ["Verified energy density metric against official OEM filings", "Removed unverified pricing extrapolation"]}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'HTML_RENDER', 5, 'COMPLETED', 850, NOW() - INTERVAL '1 hour 56 minutes', NOW() - INTERVAL '1 hour 55 minutes', '{"inliner": "juice"}'::jsonb, '{"htmlBytes": 18450}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'EMAIL_DISPATCH', 6, 'COMPLETED', 1200, NOW() - INTERVAL '1 hour 55 minutes', NOW() - INTERVAL '1 hour 55 minutes', '{"recipients": ["exec-intel@researchflow.ai"]}'::jsonb, '{"messageId": "msg_sandbox_9942a", "status": "DELIVERED"}'::jsonb)
+ON CONFLICT (workflow_id, step_order) DO NOTHING;
 
--- ==============================================================================
--- SEED DATA (Demonstration & Sandbox Verification)
--- Creates demo profile, farm, plots, and sample agronomic advisories
--- ==============================================================================
+-- Seed Sources for Workflow A
+INSERT INTO workflow_sources (workflow_id, url, title, snippet, extracted_text, status, http_status_code, tokens_estimate)
+VALUES
+    ('20000000-0000-0000-0000-000000000001', 'https://energy-storage.org/reports/solid-state-battery-benchmarks-2026', 'Global Solid-State Battery Commercialization Outlook 2026', 'Comprehensive data on pilot manufacturing yields for sulfide and oxide electrolytes.', 'Automotive OEMs have invested over $12B into solid-state cell industrialization...', 'FETCHED', 200, 4200),
+    ('20000000-0000-0000-0000-000000000001', 'https://automotive-tech-review.com/toyota-idemitsu-assb-timeline', 'Toyota & Idemitsu Announce Pre-Commercial Pilot Milestones', 'Technical update on sulfide solid electrolyte mass production facilities.', 'Idemitsu Kosan and Toyota confirmed pilot facility commissioning with 480 Wh/kg cell target...', 'FETCHED', 200, 3100)
+ON CONFLICT DO NOTHING;
 
-DO $$
-DECLARE
-    demo_user_id UUID := '00000000-0000-0000-0000-000000000001';
-    demo_farm_id UUID := '11111111-1111-1111-1111-111111111111';
-    plot_wheat_id UUID := '22222222-2222-2222-2222-222222222222';
-    plot_tomato_id UUID := '33333333-3333-3333-3333-333333333333';
-    plot_corn_id UUID := '44444444-4444-4444-4444-444444444444';
-    demo_advisory_id UUID := '55555555-5555-5555-5555-555555555555';
-BEGIN
-    -- Only insert seed data if demo user does not already exist
-    IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = demo_user_id) THEN
-        -- Insert mock auth user if auth.users exists and has access
-        BEGIN
-            INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_user_meta_data)
-            VALUES (
-                demo_user_id,
-                'demo.farmer@agrigenome.io',
-                crypt('AgriGenome2026!', gen_salt('bf')),
-                NOW(),
-                '{"full_name": "Dr. Sarah Vance", "role": "farmer"}'::jsonb
-            )
-            ON CONFLICT (id) DO NOTHING;
-        EXCEPTION WHEN OTHERS THEN
-            -- In restricted Supabase env, profiles can be seeded directly
-            NULL;
-        END;
+-- Seed Logs for Workflow A
+INSERT INTO workflow_logs (workflow_id, step_type, log_level, message, metadata)
+VALUES
+    ('20000000-0000-0000-0000-000000000001', 'PLAN_EXPANSION', 'INFO', 'Deconstructing topic into 4 orthogonal search vectors using gemini-2.5-flash.', '{"tokens": 320}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'WEB_SCRAPE', 'INFO', 'SSRF-safe web scraper fetched 4 high-authority source documents.', '{"pages": 4}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'SYNTHESIS', 'INFO', 'gemini-2.5-pro generated comprehensive 2,480-word executive briefing.', '{"status": "OK"}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'CRITIQUE_REVISE', 'INFO', 'Self-critique pass completed: 96% factual accuracy score. Corrections applied.', '{"score": 96}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'HTML_RENDER', 'INFO', 'Juice CSS inliner generated responsive, email-compliant HTML report.', '{"size": "18.4KB"}'::jsonb),
+    ('20000000-0000-0000-0000-000000000001', 'EMAIL_DISPATCH', 'INFO', 'Transactional email successfully dispatched to 2 recipients.', '{"recipients": 2}'::jsonb);
 
-        -- Insert Profile
-        INSERT INTO profiles (id, full_name, role, phone_number, preferred_language, measurement_system)
-        VALUES (
-            demo_user_id,
-            'Dr. Sarah Vance',
-            'farmer',
-            '+1 (555) 349-2810',
-            'en',
-            'metric'
-        )
-        ON CONFLICT (id) DO NOTHING;
+-- Workflow B: AWAITING_REVIEW run (Ready for human approval & inline edits!)
+INSERT INTO workflows (
+    id,
+    title,
+    topic,
+    category,
+    depth_level,
+    status,
+    require_approval,
+    recipients,
+    configuration,
+    raw_synthesis_markdown,
+    revised_synthesis_markdown,
+    current_step_index,
+    total_steps,
+    started_at
+) VALUES (
+    '20000000-0000-0000-0000-000000000002',
+    'Agentic AI Orchestration Frameworks Comparison',
+    'Comparative technical evaluation of AutoGen, LangGraph, and CrewAI for multi-agent enterprise automation in production environments.',
+    'TECH_FEASIBILITY',
+    'COMPREHENSIVE',
+    'AWAITING_REVIEW',
+    TRUE,
+    '["lead-architect@ai-enterprise.io"]'::jsonb,
+    '{"stylingTemplate": "Technical Deep-Dive", "accentColor": "#10b981"}'::jsonb,
+    '# Multi-Agent Frameworks: Architectural Comparison\n\nDraft comparison of state management and concurrency across LangGraph and AutoGen...',
+    '# Enterprise Agentic AI Frameworks: 2026 Production Architecture Briefing\n\n## Executive Summary\n* **State Graph Superiority**: LangGraph currently leads enterprise adoptions requiring deterministic cyclic state machines, checkpoints, and multi-actor human-in-the-loop (HITL) workflows.\n* **Autonomous Group Dynamics**: Microsoft AutoGen excels at open-ended collaborative consensus dialogues, but introduces higher non-deterministic token consumption in production.\n* **Orchestration Ergonomics**: CrewAI provides the steepest developer productivity curve for sequential/hierarchical role-playing teams, though with constrained lower-level network topology controls.\n\n## Strategic Architecture Comparison\n\n| Evaluation Vector | LangGraph (LangChain) | AutoGen (Microsoft) | CrewAI |\n|---|---|---|---|\n| **Core Execution Engine** | Stateful Directed Graph (Pregel-inspired) | Conversable Agent Actor Model | Hierarchical / Sequential Process |\n| **State Persistence** | Native Postgres / SQLite Checkpointers | In-Memory / Custom Cache | In-Memory / Vector Storage |\n| **Fault-Tolerance & Replay** | Atomic node rollbacks & time-travel | Conversation history replay | Step-level retry hooks |\n| **Concurrency Pattern** | Async branch fork/join | Event-driven message bus | Worker thread pool |\n| **Production Readiness** | High (Strict schema validation) | Moderate (Higher token overhead) | Moderate (Rapidly maturing) |\n\n## Critical Implementation Vulnerabilities\n1. **Unbounded Agent Loops**: Unchecked mutual feedback between agent nodes without strict iteration ceilings can result in 10x token bill spikes.\n2. **State Serialization Bottlenecks**: Complex multi-megabyte shared memory context graphs degrade Postgres checkpointer throughput under high RPS.\n\n## Recommendations (30-60-90 Days)\n* **30-Day**: Standardize on LangGraph for stateful transactional pipelines requiring human sign-off gates.\n* **60-Day**: Implement Redis-backed token circuit-breakers at the gateway layer for all autonomous agent execution nodes.\n* **90-Day**: Deploy automated synthetic evaluations measuring task resolution rate vs. dollar cost per run.\n\n## Source Index\n* LangChain StateGraph Benchmarks\n* Microsoft Research AutoGen Production Studies\n* Enterprise AI Benchmark Consortium Report Q1 2026',
+    4,
+    6,
+    NOW() - INTERVAL '15 minutes'
+) ON CONFLICT (id) DO NOTHING;
 
-        -- Insert Demo Farm
-        INSERT INTO farms (id, user_id, farm_name, location_latitude, location_longitude, state_province, country, total_acreage)
-        VALUES (
-            demo_farm_id,
-            demo_user_id,
-            'Verdant Valley Bio-Farm',
-            36.778259,
-            -119.417931,
-            'California',
-            'United States',
-            120.50
-        )
-        ON CONFLICT (id) DO NOTHING;
+-- Seed Steps for Workflow B
+INSERT INTO workflow_steps (workflow_id, step_type, step_order, status, duration_ms, started_at, completed_at, input_payload, output_payload)
+VALUES
+    ('20000000-0000-0000-0000-000000000002', 'PLAN_EXPANSION', 1, 'COMPLETED', 1350, NOW() - INTERVAL '15 minutes', NOW() - INTERVAL '14 minutes', '{"topic": "Agentic AI Orchestration Frameworks"}'::jsonb, '{"searchQueries": ["LangGraph production architecture benchmarks", "AutoGen enterprise state machine tradeoffs", "CrewAI hierarchical execution limits"]}'::jsonb),
+    ('20000000-0000-0000-0000-000000000002', 'WEB_SCRAPE', 2, 'COMPLETED', 3400, NOW() - INTERVAL '14 minutes', NOW() - INTERVAL '13 minutes', '{"concurrency": 3}'::jsonb, '{"pagesFetched": 5, "totalTokens": 18900}'::jsonb),
+    ('20000000-0000-0000-0000-000000000002', 'SYNTHESIS', 3, 'COMPLETED', 7100, NOW() - INTERVAL '13 minutes', NOW() - INTERVAL '11 minutes', '{"model": "gemini-2.5-pro"}'::jsonb, '{"markdownLength": 3200}'::jsonb),
+    ('20000000-0000-0000-0000-000000000002', 'CRITIQUE_REVISE', 4, 'COMPLETED', 5400, NOW() - INTERVAL '11 minutes', NOW() - INTERVAL '10 minutes', '{"model": "gemini-2.5-pro"}'::jsonb, '{"factualAccuracyScore": 93, "structuralIntegrityScore": 96, "critiqueNotes": ["Refined state persistence comparison table", "Clarified token consumption risks"]}'::jsonb),
+    ('20000000-0000-0000-0000-000000000002', 'HTML_RENDER', 5, 'PENDING', NULL, NULL, NULL, NULL, NULL),
+    ('20000000-0000-0000-0000-000000000002', 'EMAIL_DISPATCH', 6, 'PENDING', NULL, NULL, NULL, NULL, NULL)
+ON CONFLICT (workflow_id, step_order) DO NOTHING;
 
-        -- Insert Sample Plots
-        INSERT INTO plots (id, farm_id, plot_name, soil_type, acreage, current_crop, sowing_date, irrigation_type)
-        VALUES
-        (
-            plot_wheat_id,
-            demo_farm_id,
-            'North Ridge Plot A',
-            'Loamy',
-            45.00,
-            'Wheat',
-            CURRENT_DATE - INTERVAL '35 days',
-            'Sprinkler System'
-        ),
-        (
-            plot_tomato_id,
-            demo_farm_id,
-            'Creek Basin Plot B',
-            'Black Soil (Vertisol)',
-            30.50,
-            'Tomato',
-            CURRENT_DATE - INTERVAL '20 days',
-            'Drip Irrigation'
-        ),
-        (
-            plot_corn_id,
-            demo_farm_id,
-            'Sun Prairie Plot C',
-            'Sandy',
-            45.00,
-            'Corn (Maize)',
-            CURRENT_DATE - INTERVAL '15 days',
-            'Drip Irrigation'
-        )
-        ON CONFLICT (id) DO NOTHING;
+-- Seed Sources for Workflow B
+INSERT INTO workflow_sources (workflow_id, url, title, snippet, extracted_text, status, http_status_code, tokens_estimate)
+VALUES
+    ('20000000-0000-0000-0000-000000000002', 'https://arxiv.org/abs/2402.multi-agent-orchestration', 'Architectures of Multi-Agent AI Systems: Tradeoffs and Benchmarks', 'Evaluation of state-persistence models across contemporary agent frameworks.', 'State persistence models in LangGraph leverage Pregel-style directed acyclic and cyclic graphs...', 'FETCHED', 200, 6100),
+    ('20000000-0000-0000-0000-000000000002', 'https://github.com/langchain-ai/langgraph/discussions/production', 'LangGraph Enterprise Deployment Patterns', 'Discussion on checkpoint durability and PostgreSQL connection pools.', 'When deploying to high-throughput endpoints, connection pooling for Postgres checkpointer is paramount...', 'FETCHED', 200, 4800)
+ON CONFLICT DO NOTHING;
 
-        -- Insert Seed Advisory
-        INSERT INTO advisories (
-            id,
-            plot_id,
-            user_id,
-            domain,
-            input_parameters,
-            ai_raw_response,
-            executive_summary,
-            overall_risk_level,
-            confidence_score
-        )
-        VALUES (
-            demo_advisory_id,
-            plot_wheat_id,
-            demo_user_id,
-            'SOIL_AND_NUTRIENT',
-            '{
-                "cropType": "Wheat",
-                "growthStage": "Vegetative Growth",
-                "sowingDate": "2026-02-18",
-                "acreage": 45,
-                "soilType": "Loamy",
-                "irrigationType": "Sprinkler System",
-                "domain": "SOIL_AND_NUTRIENT",
-                "soilMetrics": {
-                    "ph": 6.2,
-                    "nitrogenPpm": 18.5,
-                    "phosphorusPpm": 24.0,
-                    "potassiumPpm": 140.0,
-                    "organicCarbonPercent": 1.2
-                },
-                "weather": {
-                    "temperatureC": 22.5,
-                    "humidityPercent": 65,
-                    "recentRainfallMm": 18
-                },
-                "symptomsDescription": "Slight chlorosis on lower leaves; slow canopy development noted in quadrant 3."
-            }'::jsonb,
-            '{
-                "executiveSummary": "Wheat crop at early vegetative stage exhibits acute sub-surface Nitrogen deficiency (18.5 ppm vs optimal 45+ ppm), manifesting as basal chlorosis. Recommended split-dose urea top-dressing with zinc chelate foliar spray.",
-                "overallRiskLevel": "MODERATE",
-                "confidenceScore": 94.5,
-                "soilAndNutrientAnalysis": {
-                    "currentStatus": "Nitrogen depleted, Phosphorus adequate, Potassium optimal. Mild acidity at pH 6.2 within tolerable bounds.",
-                    "deficienciesIdentified": ["Nitrogen (Sub-acute)", "Zinc (Trace deficit)"],
-                    "npkAdjustmentRegimen": {
-                        "nitrogenKgPerHa": 48.0,
-                        "phosphorusKgPerHa": 0.0,
-                        "potassiumKgPerHa": 15.0,
-                        "applicationTiming": "Immediate morning application prior to next scheduled sprinkler cycle",
-                        "applicationMethod": "Top-dressing with granular urea coated with neem extract followed by fertigation"
-                    },
-                    "phRemediation": "Soil pH 6.2 is currently stable for Triticum aestivum; no lime amendment required."
-                },
-                "pestAndPathogenDiagnosis": {
-                    "diagnosedIssues": [
-                        {
-                            "name": "Physiological Nitrogen Chlorosis",
-                            "scientificName": "Abiotic Nitrogen Deprivation",
-                            "severity": "MODERATE",
-                            "symptomsObserved": ["Pale green/yellow lower leaves", "Stunted tillering"],
-                            "causalAgent": "Leaching following 18mm rainfall and high vegetative uptake"
-                        }
-                    ],
-                    "integratedPestManagement": {
-                        "culturalControls": [
-                            "Implement shallow aeration between furrows to stimulate microbial mineralisation",
-                            "Monitor field quadrant 3 for secondary rhizoctonia incidence"
-                        ],
-                        "biologicalControls": [
-                            "Inoculate root zone with Azotobacter chroococcum bio-fertilizer slurry at 5 kg/ha"
-                        ],
-                        "chemicalInterventions": [
-                            {
-                                "activeIngredient": "Zinc EDTA Chelate 12%",
-                                "commercialFormulation": "Chelamin Soluble Powder",
-                                "dosagePerAcre": "500 g per 200 L water",
-                                "preHarvestIntervalDays": 14,
-                                "safetyPrecautions": "Wear nitrile gloves, particulate respirator (N95), and avoid drift near water runoff channels."
-                            }
-                        ]
-                    }
-                },
-                "irrigationSchedule": {
-                    "weeklyEvapotranspirationEstimateMm": 28.5,
-                    "wateringFrequencyDays": 4,
-                    "litersPerPlotArea": 125000,
-                    "criticalDroughtMitigationWarning": null
-                },
-                "actionableTasks": [
-                    {
-                        "category": "Nutrient Management",
-                        "action": "Broadcast 48 kg/ha Urea split-dose across Plot A before next irrigation",
-                        "urgencyDays": 2
-                    },
-                    {
-                        "category": "Foliar Nutrition",
-                        "action": "Apply Zinc EDTA foliar spray (500g/acre) during low-sun hours",
-                        "urgencyDays": 4
-                    },
-                    {
-                        "category": "Irrigation",
-                        "action": "Run 2.5-hour sprinkler cycle delivering 28.5mm effective water",
-                        "urgencyDays": 3
-                    },
-                    {
-                        "category": "Monitoring",
-                        "action": "Photograph tiller development in quadrant 3 and record SPAD chlorophyll index",
-                        "urgencyDays": 7
-                    }
-                ]
-            }'::jsonb,
-            'Wheat crop at early vegetative stage exhibits acute sub-surface Nitrogen deficiency (18.5 ppm vs optimal 45+ ppm), manifesting as basal chlorosis. Recommended split-dose urea top-dressing with zinc chelate foliar spray.',
-            'MODERATE',
-            94.50
-        )
-        ON CONFLICT (id) DO NOTHING;
-
-        -- Insert Seed Action Items
-        INSERT INTO advisory_action_items (advisory_id, category, action_text, urgency_days, status)
-        VALUES
-        (
-            demo_advisory_id,
-            'Nutrient Management',
-            'Broadcast 48 kg/ha Urea split-dose across Plot A before next irrigation',
-            2,
-            'PENDING'
-        ),
-        (
-            demo_advisory_id,
-            'Foliar Nutrition',
-            'Apply Zinc EDTA foliar spray (500g/acre) during low-sun hours',
-            4,
-            'PENDING'
-        ),
-        (
-            demo_advisory_id,
-            'Irrigation',
-            'Run 2.5-hour sprinkler cycle delivering 28.5mm effective water',
-            3,
-            'DONE'
-        ),
-        (
-            demo_advisory_id,
-            'Monitoring',
-            'Photograph tiller development in quadrant 3 and record SPAD chlorophyll index',
-            7,
-            'PENDING'
-        )
-        ON CONFLICT (id) DO NOTHING;
-    END IF;
-END $$;
+-- Seed Logs for Workflow B
+INSERT INTO workflow_logs (workflow_id, step_type, log_level, message, metadata)
+VALUES
+    ('20000000-0000-0000-0000-000000000002', 'PLAN_EXPANSION', 'INFO', 'Generated 3 high-precision search queries targeting architecture tradeoffs.', '{"queries": 3}'::jsonb),
+    ('20000000-0000-0000-0000-000000000002', 'WEB_SCRAPE', 'INFO', 'Extracted 18,900 tokens of verified technical documentation.', '{"tokens": 18900}'::jsonb),
+    ('20000000-0000-0000-0000-000000000002', 'SYNTHESIS', 'INFO', 'Synthesized architectural matrix comparing LangGraph, AutoGen, and CrewAI.', '{"model": "gemini-2.5-pro"}'::jsonb),
+    ('20000000-0000-0000-0000-000000000002', 'CRITIQUE_REVISE', 'INFO', 'Critique agent validated state persistence and concurrency claims (Score: 93/100).', '{"score": 93}'::jsonb),
+    ('20000000-0000-0000-0000-000000000002', 'CRITIQUE_REVISE', 'WARN', 'Approval gate active: Pausing execution for human inspection before email dispatch.', '{"status": "AWAITING_REVIEW"}'::jsonb);

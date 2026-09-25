@@ -1,5 +1,5 @@
 {
-  "name": "agri-genome-os-client",
+  "name": "researchflow-client",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -12,8 +12,10 @@
     "@hookform/resolvers": "^3.10.0",
     "@supabase/supabase-js": "^2.49.1",
     "@tanstack/react-query": "^5.66.9",
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "lucide-react": "^0.475.0",
+    "marked": "^18.0.14",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.54.2",
@@ -23,6 +25,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/marked": "^5.0.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",

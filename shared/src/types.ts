@@ -1,147 +1,147 @@
-import { 
-  CROP_TYPES, 
-  SOIL_TYPES, 
-  GROWTH_STAGES, 
-  IRRIGATION_TYPES, 
-  ADVISORY_DOMAINS, 
-  RISK_LEVELS, 
-  USER_ROLES 
-} from './constants';
-import { AdvisoryInputData } from './validators';
+import {
+  CreateWorkflowInput,
+  CritiqueResponse,
+  DepthLevelEnum,
+  QueryPlanningResponse,
+  ResearchCategoryEnum,
+  StepStatusEnum,
+  StepTypeEnum,
+  WorkflowStatusEnum
+} from './schemas/workflow';
+import { z } from 'zod';
 
-export type CropType = typeof CROP_TYPES[number];
-export type SoilType = typeof SOIL_TYPES[number];
-export type GrowthStage = typeof GROWTH_STAGES[number];
-export type IrrigationType = typeof IRRIGATION_TYPES[number];
-export type AdvisoryDomain = typeof ADVISORY_DOMAINS[number];
-export type RiskLevel = typeof RISK_LEVELS[number];
-export type UserRole = typeof USER_ROLES[number];
+export type WorkflowStatus = z.infer<typeof WorkflowStatusEnum>;
+export type StepType = z.infer<typeof StepTypeEnum>;
+export type StepStatus = z.infer<typeof StepStatusEnum>;
+export type ResearchCategory = z.infer<typeof ResearchCategoryEnum>;
+export type DepthLevel = z.infer<typeof DepthLevelEnum>;
 
-// Gemini Structured Output TypeScript Representation
-export interface NpkAdjustmentRegimen {
-  nitrogenKgPerHa: number;
-  phosphorusKgPerHa: number;
-  potassiumKgPerHa: number;
-  applicationTiming: string;
-  applicationMethod: string;
+export interface WorkflowConfiguration {
+  customSearchQueries?: string[];
+  excludedDomains?: string[];
+  stylingTemplate?: string;
+  accentColor?: string;
+  immediateExecution?: boolean;
+  maxSourcePages?: number;
+  [key: string]: any;
 }
 
-export interface SoilAndNutrientAnalysis {
-  currentStatus: string;
-  deficienciesIdentified: string[];
-  npkAdjustmentRegimen: NpkAdjustmentRegimen;
-  phRemediation?: string | null;
+export interface Workflow {
+  id: string;
+  user_id?: string | null;
+  title: string;
+  topic: string;
+  category: ResearchCategory;
+  depth_level: DepthLevel;
+  status: WorkflowStatus;
+  require_approval: boolean;
+  recipients: string[];
+  configuration: WorkflowConfiguration;
+  raw_synthesis_markdown?: string | null;
+  revised_synthesis_markdown?: string | null;
+  final_html_report?: string | null;
+  current_step_index: number;
+  total_steps: number;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  steps?: WorkflowStep[];
+  sources?: WorkflowSource[];
+  logs?: WorkflowLog[];
 }
 
-export interface DiagnosedIssue {
+export interface WorkflowStep {
+  id: string;
+  workflow_id: string;
+  step_type: StepType;
+  step_order: number;
+  status: StepStatus;
+  input_payload?: any;
+  output_payload?: any;
+  error_details?: string | null;
+  duration_ms?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
+
+export interface WorkflowSource {
+  id: string;
+  workflow_id: string;
+  url: string;
+  title?: string | null;
+  snippet?: string | null;
+  extracted_text?: string | null;
+  status: 'FETCHED' | 'FAILED' | 'SKIPPED' | string;
+  http_status_code?: number | null;
+  tokens_estimate?: number | null;
+  created_at: string;
+}
+
+export interface WorkflowLog {
+  id: number | string;
+  workflow_id: string;
+  step_type?: StepType | null;
+  log_level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
+  message: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface WorkflowTemplate {
+  id: string;
   name: string;
-  scientificName?: string;
-  severity: RiskLevel;
-  symptomsObserved: string[];
-  causalAgent?: string;
-}
-
-export interface ChemicalIntervention {
-  activeIngredient: string;
-  commercialFormulation?: string;
-  dosagePerAcre: string;
-  preHarvestIntervalDays: number;
-  safetyPrecautions: string;
-}
-
-export interface IntegratedPestManagement {
-  culturalControls: string[];
-  biologicalControls: string[];
-  chemicalInterventions: ChemicalIntervention[];
-}
-
-export interface PestAndPathogenDiagnosis {
-  diagnosedIssues: DiagnosedIssue[];
-  integratedPestManagement: IntegratedPestManagement;
-}
-
-export interface IrrigationSchedule {
-  weeklyEvapotranspirationEstimateMm: number;
-  wateringFrequencyDays: number;
-  litersPerPlotArea: number;
-  criticalDroughtMitigationWarning?: string | null;
-}
-
-export interface ActionableTask {
-  category: string;
-  action: string;
-  urgencyDays: number;
-}
-
-export interface CropAdvisoryStructuredResponse {
-  executiveSummary: string;
-  overallRiskLevel: RiskLevel;
-  confidenceScore: number;
-  soilAndNutrientAnalysis: SoilAndNutrientAnalysis;
-  pestAndPathogenDiagnosis: PestAndPathogenDiagnosis;
-  irrigationSchedule: IrrigationSchedule;
-  actionableTasks: ActionableTask[];
-}
-
-// Database Entity Types
-export interface ProfileRecord {
-  id: string;
-  full_name: string;
-  role: UserRole;
-  phone_number?: string | null;
-  preferred_language: string;
-  measurement_system: 'metric' | 'imperial';
+  category: ResearchCategory;
+  description: string;
+  prompt_override?: string | null;
+  styling_config?: Record<string, any>;
+  is_default: boolean;
   created_at: string;
-  updated_at: string;
 }
 
-export interface FarmRecord {
-  id: string;
-  user_id: string;
-  farm_name: string;
-  location_latitude?: number | null;
-  location_longitude?: number | null;
-  state_province: string;
-  country: string;
-  total_acreage: number;
-  created_at: string;
-  updated_at: string;
+export interface WorkflowMetrics {
+  totalWorkflows: number;
+  completedWorkflows: number;
+  failedWorkflows: number;
+  runningWorkflows: number;
+  awaitingReviewWorkflows: number;
+  successRate: number; // percentage 0 - 100
+  averageDurationSeconds: number;
+  activeScheduledJobs: number;
 }
 
-export interface PlotRecord {
-  id: string;
-  farm_id: string;
-  plot_name: string;
-  soil_type: string;
-  acreage: number;
-  current_crop?: string | null;
-  sowing_date?: string | null;
-  irrigation_type: string;
-  created_at: string;
-  updated_at: string;
+export type SSEEventType = 
+  | 'CONNECTED'
+  | 'HEARTBEAT'
+  | 'STATUS_CHANGE'
+  | 'STEP_START'
+  | 'STEP_UPDATE'
+  | 'STEP_COMPLETE'
+  | 'STEP_FAILED'
+  | 'LOG_APPEND'
+  | 'DRAFT_UPDATED'
+  | 'REPORT_RENDERED'
+  | 'EMAIL_DISPATCHED'
+  | 'WORKFLOW_COMPLETE'
+  | 'WORKFLOW_FAILED'
+  | 'WORKFLOW_CANCELLED';
+
+export interface SSEMessagePayload {
+  type: SSEEventType;
+  workflowId: string;
+  timestamp: string;
+  data: any;
 }
 
-export interface AdvisoryRecord {
-  id: string;
-  plot_id: string;
-  user_id: string;
-  domain: AdvisoryDomain;
-  input_parameters: AdvisoryInputData;
-  ai_raw_response: CropAdvisoryStructuredResponse;
-  executive_summary: string;
-  overall_risk_level: RiskLevel;
-  confidence_score: number;
-  created_at: string;
-  plots?: PlotRecord;
-  advisory_action_items?: AdvisoryActionItemRecord[];
-}
-
-export interface AdvisoryActionItemRecord {
-  id: string;
-  advisory_id: string;
-  category: string;
-  action_text: string;
-  urgency_days: number;
-  status: 'PENDING' | 'DONE';
-  created_at: string;
+export interface KnowledgeEntity {
+  title: string;
+  description?: string;
+  extract: string;
+  thumbnailUrl?: string;
+  sourceUrl: string;
+  source: 'wikipedia' | 'duckduckgo' | 'combined';
+  relatedTopics?: Array<{ title: string; url?: string; snippet?: string }>;
+  infobox?: Record<string, string>;
 }

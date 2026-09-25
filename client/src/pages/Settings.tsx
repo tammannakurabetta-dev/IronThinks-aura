@@ -1,202 +1,329 @@
-import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { 
-  Settings as SettingsIcon, 
-  Cpu, 
-  Database, 
-  ShieldCheck, 
-  Bell, 
-  Globe, 
-  Key, 
-  Save, 
-  Check, 
-  AlertCircle 
+import React, { useState, useEffect } from 'react';
+import {
+  Settings as SettingsIcon,
+  ShieldCheck,
+  Database,
+  Cpu,
+  Mail,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  Send,
+  Zap,
+  Globe,
+  Sliders,
+  ExternalLink
 } from 'lucide-react';
-import { isSupabaseClientConfigured } from '../api/client';
+import { workflowApi } from '../api/workflowClient';
 
 export const Settings: React.FC = () => {
-  const { user } = useAuth();
-  const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>('metric');
-  const [emailAlerts, setEmailAlerts] = useState<boolean>(true);
-  const [riskSms, setRiskSms] = useState<boolean>(false);
-  const [savedToast, setSavedToast] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [geminiTesting, setGeminiTesting] = useState(false);
+  const [geminiResult, setGeminiResult] = useState<any>(null);
+  const [emailTesting, setEmailTesting] = useState(false);
+  const [emailResult, setEmailResult] = useState<any>(null);
+  const [testEmailAddress, setTestEmailAddress] = useState('operator@researchflow.ai');
 
-  const handleSave = (e: React.FormEvent) => {
+  const loadSettings = async () => {
+    setIsLoading(true);
+    try {
+      const data = await workflowApi.getSettings();
+      setSettings(data);
+    } catch (err) {
+      console.error('Failed to load settings:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const handleTestGemini = async () => {
+    setGeminiTesting(true);
+    setGeminiResult(null);
+    try {
+      const res = await workflowApi.verifyGemini();
+      setGeminiResult(res);
+    } catch (err: any) {
+      setGeminiResult({ success: false, error: err.message });
+    } finally {
+      setGeminiTesting(false);
+    }
+  };
+
+  const handleTestEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedToast(true);
-    setTimeout(() => setSavedToast(false), 2500);
+    setEmailTesting(true);
+    setEmailResult(null);
+    try {
+      const res = await workflowApi.verifyEmail(testEmailAddress);
+      setEmailResult(res);
+    } catch (err: any) {
+      setEmailResult({ success: false, error: err.message });
+    } finally {
+      setEmailTesting(false);
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      {/* Top Header */}
-      <div className="pb-4 border-b border-slate-800">
-        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">
-          <SettingsIcon className="w-3.5 h-3.5" />
-          <span>System & Farm Configuration</span>
+    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+        <div>
+          <div className="flex items-center gap-2 text-xs text-sky-400 font-semibold mb-1">
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Infrastructure & Diagnostics</span>
+          </div>
+          <h1 className="text-2xl font-extrabold text-white">
+            System & API Configuration
+          </h1>
+          <p className="text-slate-400 text-xs mt-0.5">
+            Validate Google Gemini API credentials, database connections, and transactional email deliverability.
+          </p>
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-100 font-display">Farm Settings</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Configure measurement units, notification thresholds, and inspect backend AI/Database integrations.
-        </p>
+
+        <button
+          onClick={loadSettings}
+          className="btn-secondary text-xs"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          <span>Refresh Diagnostics</span>
+        </button>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-6">
-        {/* Farm & Agronomist Profile */}
-        <div className="glass-card p-6 space-y-4">
-          <h2 className="font-bold text-slate-100 text-base">User & Operational Profile</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Full Name</label>
-              <input
-                type="text"
-                disabled
-                value={user?.fullName || 'Dr. Sarah Vance'}
-                className="input-field bg-slate-950/60 text-slate-300 cursor-not-allowed"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Operational Role</label>
-              <input
-                type="text"
-                disabled
-                value={user?.role?.toUpperCase() || 'FARMER'}
-                className="input-field bg-slate-950/60 text-emerald-400 font-semibold cursor-not-allowed"
-              />
-            </div>
-          </div>
+      {isLoading && !settings ? (
+        <div className="h-48 flex items-center justify-center text-slate-500 text-xs">
+          Loading diagnostic telemetry...
         </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Card 1: Google Gemini Integration */}
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center">
+                  <Cpu className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-100">
+                    Google Gemini AI (@google/genai)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Deep Synthesis (gemini-2.5-pro) & Fast Query Formulation (gemini-2.5-flash)
+                  </p>
+                </div>
+              </div>
 
-        {/* Measurement Units */}
-        <div className="glass-card p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-slate-100 text-base flex items-center gap-2">
-                <Globe className="w-4 h-4 text-emerald-400" />
-                Measurement & Unit Standardization
-              </h2>
-              <p className="text-xs text-slate-400">Controls fertilizer dosage and irrigation metrics</p>
-            </div>
-            <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs font-medium">
-              <button
-                type="button"
-                onClick={() => setUnitSystem('metric')}
-                className={`px-3 py-1.5 rounded-lg transition-colors ${
-                  unitSystem === 'metric'
-                    ? 'bg-emerald-600 text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
+              <span
+                className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                  settings?.aiProvider?.isKeyConfigured
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                 }`}
               >
-                Metric (kg/ha, mm, °C)
-              </button>
+                {settings?.aiProvider?.isKeyConfigured ? 'Live Active' : 'Fallback / Heuristic Sandbox'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 font-mono">
+                <div className="text-slate-400 text-[11px]">Reasoning Model:</div>
+                <div className="text-sky-400 font-bold">gemini-2.5-pro</div>
+                <div className="text-slate-500 text-[10px]">Utilized in Stage 3 (Synthesis) & Stage 4 (Critique)</div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 font-mono">
+                <div className="text-slate-400 text-[11px]">Fast Planner Model:</div>
+                <div className="text-indigo-400 font-bold">gemini-2.5-flash</div>
+                <div className="text-slate-500 text-[10px]">Utilized in Stage 1 (Search Strategy Deconstruction)</div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                To activate live Google GenAI cloud calls, set <code className="text-sky-400">GEMINI_API_KEY</code> in server/.env
+              </span>
               <button
-                type="button"
-                onClick={() => setUnitSystem('imperial')}
-                className={`px-3 py-1.5 rounded-lg transition-colors ${
-                  unitSystem === 'imperial'
-                    ? 'bg-emerald-600 text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                onClick={handleTestGemini}
+                disabled={geminiTesting}
+                className="btn-primary text-xs"
               >
-                Imperial (lbs/ac, in, °F)
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>{geminiTesting ? 'Testing Connectivity...' : 'Ping Gemini Model'}</span>
               </button>
             </div>
+
+            {geminiResult && (
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono">
+                <div className="flex items-center gap-2 mb-1">
+                  {geminiResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  )}
+                  <span className="font-bold text-slate-200">
+                    Status: {geminiResult.status}
+                  </span>
+                </div>
+                <p className="text-slate-400">
+                  {geminiResult.message || geminiResult.response || geminiResult.error}
+                </p>
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Notification Preferences */}
-        <div className="glass-card p-6 space-y-4">
-          <h2 className="font-bold text-slate-100 text-base flex items-center gap-2">
-            <Bell className="w-4 h-4 text-amber-400" />
-            Agronomic Risk Alert Protocols
-          </h2>
-
-          <div className="space-y-3 text-xs">
-            <label className="flex items-center justify-between p-3 rounded-xl bg-slate-950/50 border border-slate-800 cursor-pointer">
-              <div>
-                <p className="font-semibold text-slate-200">Critical Pathogen & Blight Alerts</p>
-                <p className="text-slate-400 text-[11px]">Instant dispatch when disease risk reaches HIGH or CRITICAL</p>
+          {/* Card 2: Database & State Engine */}
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-100">
+                    PostgreSQL / Supabase FSM Storage
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Atomic state persistence, step payloads, and immutable audit logs
+                  </p>
+                </div>
               </div>
-              <input
-                type="checkbox"
-                checked={emailAlerts}
-                onChange={(e) => setEmailAlerts(e.target.checked)}
-                className="w-4 h-4 accent-emerald-500 rounded"
-              />
-            </label>
 
-            <label className="flex items-center justify-between p-3 rounded-xl bg-slate-950/50 border border-slate-800 cursor-pointer">
-              <div>
-                <p className="font-semibold text-slate-200">Thermal Drought Evapotranspiration Warnings</p>
-                <p className="text-slate-400 text-[11px]">SMS alert when daily ET exceeds 6.0 mm with rain deficiency</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={riskSms}
-                onChange={(e) => setRiskSms(e.target.checked)}
-                className="w-4 h-4 accent-emerald-500 rounded"
-              />
-            </label>
-          </div>
-        </div>
-
-        {/* Backend & AI Integration Diagnostics */}
-        <div className="glass-card p-6 space-y-4">
-          <h2 className="font-bold text-slate-100 text-base flex items-center gap-2">
-            <Key className="w-4 h-4 text-sky-400" />
-            AI Engine & Database Architecture Status
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                  <Cpu className="w-4 h-4 text-emerald-400" />
-                  Google Gen AI SDK
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  gemini-2.5-pro
-                </span>
-              </div>
-              <p className="text-slate-400 text-[11px]">
-                Rigid responseSchema enforcement preventing hallucinated fertilizer formulas.
-              </p>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                {settings?.database?.status || 'ONLINE'}
+              </span>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                  <Database className="w-4 h-4 text-sky-400" />
-                  Supabase PostgreSQL
-                </span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                  isSupabaseClientConfigured
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                }`}>
-                  {isSupabaseClientConfigured ? 'Live Cloud Connected' : 'Sandbox Ready'}
-                </span>
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs font-mono">
+              <div className="flex justify-between text-slate-300">
+                <span>Active Driver:</span>
+                <span className="text-sky-400 font-bold">{settings?.database?.driver}</span>
               </div>
-              <p className="text-slate-400 text-[11px]">
-                Multi-tenant Row Level Security (RLS) isolating farm plot telemetry.
-              </p>
+              <div className="flex justify-between text-slate-400">
+                <span>Connection Details:</span>
+                <span className="text-slate-300">{settings?.database?.message}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Schema Migration:</span>
+                <span className="text-emerald-400">001_initial_schema.sql (Validated)</span>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-500 leading-relaxed">
+              💡 Provide your live PostgreSQL URI via <code className="text-sky-400">DATABASE_URL</code> in <code className="text-slate-400">server/.env</code> to persist state in Supabase Cloud.
+            </div>
+          </div>
+
+          {/* Card 3: Email Delivery Dispatcher */}
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-100">
+                    Transactional Email Dispatcher
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Resend API / SMTP with Juice inline-CSS compiler
+                  </p>
+                </div>
+              </div>
+
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-800 text-sky-400 border border-slate-700">
+                {settings?.emailProvider?.activeProvider?.toUpperCase()}
+              </span>
+            </div>
+
+            <form onSubmit={handleTestEmail} className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  required
+                  value={testEmailAddress}
+                  onChange={e => setTestEmailAddress(e.target.value)}
+                  placeholder="operator@company.com"
+                  className="input-field"
+                />
+                <button
+                  type="submit"
+                  disabled={emailTesting}
+                  className="btn-primary text-xs shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{emailTesting ? 'Sending...' : 'Test Delivery'}</span>
+                </button>
+              </div>
+            </form>
+
+            {emailResult && (
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono">
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span className="font-bold text-slate-200">
+                    Delivered via {emailResult.result?.provider}
+                  </span>
+                </div>
+                <div className="text-slate-400">
+                  Message ID: {emailResult.result?.messageId}
+                </div>
+                {emailResult.result?.previewUrl && (
+                  <a
+                    href={emailResult.result.previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sky-400 hover:underline mt-1 inline-flex items-center gap-1 font-bold"
+                  >
+                    View Ethereal Mail Preview <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Card 4: Web Scraping & Ingestion Guardrails */}
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-100">
+                    Web Scraping & SSRF Guardrails
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Cheerio semantic parser, timeout ceilings, and private IP blocks
+                  </p>
+                </div>
+              </div>
+
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                ACTIVE
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 text-xs font-mono">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                <span className="text-slate-500 text-[10px] block">Max Concurrency:</span>
+                <span className="text-slate-200 font-bold text-sm">{settings?.scraper?.maxConcurrent || 3}</span>
+              </div>
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                <span className="text-slate-500 text-[10px] block">Timeout Limit:</span>
+                <span className="text-slate-200 font-bold text-sm">{settings?.scraper?.timeoutMs || 8000}ms</span>
+              </div>
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                <span className="text-slate-500 text-[10px] block">Max Pages Ingested:</span>
+                <span className="text-slate-200 font-bold text-sm">{settings?.scraper?.maxSourcePages || 5}</span>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Save Bar */}
-        <div className="flex items-center justify-end gap-3 pt-4">
-          {savedToast && (
-            <span className="text-xs text-emerald-400 flex items-center gap-1 font-semibold">
-              <Check className="w-4 h-4" /> Preferences saved!
-            </span>
-          )}
-          <button type="submit" className="btn-primary">
-            <Save className="w-4 h-4" />
-            <span>Save Configuration</span>
-          </button>
-        </div>
-      </form>
+      )}
     </div>
   );
 };

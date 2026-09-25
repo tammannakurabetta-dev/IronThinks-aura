@@ -1,5 +1,5 @@
 {
-  "name": "agri-genome-os-shared",
+  "name": "researchflow-shared",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
