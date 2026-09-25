@@ -11,7 +11,9 @@ import {
   X,
   ExternalLink,
   ShieldCheck,
-  Zap
+  Zap,
+  Search,
+  BookOpen
 } from 'lucide-react';
 
 export const AppLayout: React.FC = () => {
@@ -21,10 +23,12 @@ export const AppLayout: React.FC = () => {
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { label: 'Knowledge Explorer', path: '/search', icon: Search, badge: 'Wiki AI' },
     { label: 'New Research', path: '/workflows/new', icon: PlusCircle, badge: 'Launch' },
     { label: 'Report Templates', path: '/templates', icon: FileText },
     { label: 'System Settings', path: '/settings', icon: Settings },
   ];
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row antialiased">

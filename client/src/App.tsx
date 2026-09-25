@@ -7,6 +7,7 @@ import { CreateWorkflow } from './pages/CreateWorkflow';
 import { WorkflowDetail } from './pages/WorkflowDetail';
 import { Templates } from './pages/Templates';
 import { Settings } from './pages/Settings';
+import { KnowledgeSearchPage } from './pages/KnowledgeSearchPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +26,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
+            <Route path="search" element={<KnowledgeSearchPage />} />
             <Route path="workflows/new" element={<CreateWorkflow />} />
             <Route path="workflows/:id" element={<WorkflowDetail />} />
             <Route path="templates" element={<Templates />} />
