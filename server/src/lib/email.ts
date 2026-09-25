@@ -76,7 +76,10 @@ export async function sendEmailReport(params: SendEmailParams): Promise<SendEmai
   // Sanitize header parameters
   const cleanSubject = sanitizeHeader(subject);
   const cleanFrom = sanitizeHeader(from || process.env.SYSTEM_FROM_EMAIL || 'reports@researchflow.ai');
-  const validRecipients = to.map(r => sanitizeHeader(r));
+  const validRecipients = to.map(r => sanitizeHeader(r)).filter(Boolean);
+  if (validRecipients.length === 0) {
+    validRecipients.push(process.env.DEFAULT_RECIPIENT || 'operator@researchflow.ai');
+  }
 
   // 1. Resend API Integration check
   const resendApiKey = process.env.RESEND_API_KEY;

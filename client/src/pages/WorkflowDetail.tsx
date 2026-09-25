@@ -162,7 +162,7 @@ export const WorkflowDetail: React.FC = () => {
     }
   }, [loadWorkflow]);
 
-  useWorkflowSSE(id, handleSSEEvent);
+  useWorkflowSSE(workflow ? id : undefined, handleSSEEvent);
 
   // Approval handler
   const handleApprove = async () => {
@@ -232,13 +232,21 @@ export const WorkflowDetail: React.FC = () => {
 
   if (errorMsg || !workflow) {
     return (
-      <div className="p-8 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 max-w-lg mx-auto text-center space-y-3">
-        <AlertCircle className="w-10 h-10 mx-auto text-rose-400" />
-        <h3 className="font-bold text-base">Workflow Not Found</h3>
-        <p className="text-xs">{errorMsg || 'The requested workflow does not exist.'}</p>
-        <button onClick={() => navigate('/')} className="btn-secondary text-xs mx-auto">
-          Return to Dashboard
-        </button>
+      <div className="p-8 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 max-w-lg mx-auto text-center space-y-4">
+        <AlertCircle className="w-12 h-12 mx-auto text-rose-400" />
+        <div>
+          <h3 className="font-bold text-lg text-white">Workflow Not Found</h3>
+          <p className="text-xs text-slate-300 mt-1">{errorMsg || 'The requested research workflow does not exist or was removed.'}</p>
+        </div>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button onClick={() => navigate('/')} className="btn-secondary text-xs">
+            Return to Dashboard
+          </button>
+          <button onClick={() => navigate('/search')} className="btn-primary text-xs flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5" />
+            <span>Search Knowledge</span>
+          </button>
+        </div>
       </div>
     );
   }

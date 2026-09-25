@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { dbConfig } from './connection';
 import {
@@ -517,28 +519,100 @@ class MemoryStore {
   logs: Map<string, WorkflowLog[]> = new Map();
   templates: Map<string, WorkflowTemplate> = new Map();
   logCounter: number = 100;
+  private storePath: string;
 
   constructor() {
+    this.storePath = path.resolve(__dirname, '../../../.data/store.json');
+    this.load();
+  }
+
+  load() {
+    // Seed initial templates and mock records
     initialTemplates.forEach(t => this.templates.set(t.id, t));
     initialWorkflows.forEach(w => this.workflows.set(w.id, { ...w }));
     
     initialSteps.forEach(s => {
       const existing = this.steps.get(s.workflow_id) || [];
-      existing.push({ ...s });
-      this.steps.set(s.workflow_id, existing);
+      if (!existing.some(e => e.id === s.id)) {
+        existing.push({ ...s });
+        this.steps.set(s.workflow_id, existing);
+      }
     });
 
     initialSources.forEach(src => {
       const existing = this.sources.get(src.workflow_id) || [];
-      existing.push({ ...src });
-      this.sources.set(src.workflow_id, existing);
+      if (!existing.some(e => e.id === src.id)) {
+        existing.push({ ...src });
+        this.sources.set(src.workflow_id, existing);
+      }
     });
 
     initialLogs.forEach(l => {
       const existing = this.logs.get(l.workflow_id) || [];
-      existing.push({ ...l });
-      this.logs.set(l.workflow_id, existing);
+      if (!existing.some(e => e.id === l.id)) {
+        existing.push({ ...l });
+        this.logs.set(l.workflow_id, existing);
+      }
     });
+
+    // Restore saved persistent records from disk if present
+    try {
+      if (fs.existsSync(this.storePath)) {
+        const raw = fs.readFileSync(this.storePath, 'utf-8');
+        const data = JSON.parse(raw);
+        if (Array.isArray(data.workflows)) {
+          for (const [id, wf] of data.workflows) {
+            this.workflows.set(id, wf);
+          }
+        }
+        if (Array.isArray(data.steps)) {
+          for (const [id, st] of data.steps) {
+            this.steps.set(id, st);
+          }
+        }
+        if (Array.isArray(data.sources)) {
+          for (const [id, src] of data.sources) {
+            this.sources.set(id, src);
+          }
+        }
+        if (Array.isArray(data.logs)) {
+          for (const [id, lg] of data.logs) {
+            this.logs.set(id, lg);
+          }
+        }
+        if (Array.isArray(data.templates) && data.templates.length > 0) {
+          for (const [id, tm] of data.templates) {
+            this.templates.set(id, tm);
+          }
+        }
+        if (typeof data.logCounter === 'number' && data.logCounter > this.logCounter) {
+          this.logCounter = data.logCounter;
+        }
+        console.log(`[MemoryStore] Successfully restored ${this.workflows.size} workflows from persistent disk cache.`);
+      }
+    } catch (err: any) {
+      console.warn('[MemoryStore] Failed to load persistent store from disk:', err.message);
+    }
+  }
+
+  save() {
+    try {
+      const dir = path.dirname(this.storePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = {
+        workflows: Array.from(this.workflows.entries()),
+        steps: Array.from(this.steps.entries()),
+        sources: Array.from(this.sources.entries()),
+        logs: Array.from(this.logs.entries()),
+        templates: Array.from(this.templates.entries()),
+        logCounter: this.logCounter
+      };
+      fs.writeFileSync(this.storePath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (err: any) {
+      console.warn('[MemoryStore] Failed to save state to disk:', err.message);
+    }
   }
 }
 
@@ -668,6 +742,7 @@ export const WorkflowRepository = {
     memoryStore.steps.set(id, steps);
     memoryStore.sources.set(id, []);
     memoryStore.logs.set(id, []);
+    memoryStore.save();
 
     return { ...workflow, steps };
   },
@@ -842,6 +917,7 @@ export const WorkflowRepository = {
     }
 
     memoryStore.workflows.set(id, updated);
+    memoryStore.save();
     return updated;
   },
 
@@ -871,6 +947,7 @@ export const WorkflowRepository = {
       existingSteps.push(updatedStep);
       memoryStore.steps.set(workflowId, existingSteps);
     }
+    memoryStore.save();
 
     if (dbConfig.pool) {
       try {
@@ -953,6 +1030,7 @@ export const WorkflowRepository = {
     const list = memoryStore.sources.get(source.workflow_id) || [];
     list.push(newSource);
     memoryStore.sources.set(source.workflow_id, list);
+    memoryStore.save();
 
     return newSource;
   },
@@ -992,6 +1070,7 @@ export const WorkflowRepository = {
     const list = memoryStore.logs.get(workflowId) || [];
     list.push(log);
     memoryStore.logs.set(workflowId, list);
+    memoryStore.save();
 
     return log;
   },

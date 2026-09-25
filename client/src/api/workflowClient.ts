@@ -176,6 +176,8 @@ export function useWorkflowSSE(
 
     let eventSource: EventSource | null = null;
     let reconnectTimeout: any = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 12;
 
     function connect() {
       eventSource = new EventSource(`${API_BASE}/workflows/${workflowId}/stream`);
@@ -199,6 +201,7 @@ export function useWorkflowSSE(
 
       eventTypes.forEach(eventType => {
         eventSource?.addEventListener(eventType, (e: MessageEvent) => {
+          retryCount = 0; // Reset retry counter on successful message reception
           try {
             const data = JSON.parse(e.data);
             onEventRef.current({
@@ -214,9 +217,14 @@ export function useWorkflowSSE(
       });
 
       eventSource.onerror = (err) => {
-        console.warn('[SSE] Stream disconnected. Scheduling reconnect in 3s...', err);
         eventSource?.close();
-        reconnectTimeout = setTimeout(connect, 3000);
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          const delay = Math.min(1000 * Math.pow(1.4, retryCount), 10000);
+          reconnectTimeout = setTimeout(connect, delay);
+        } else {
+          console.warn(`[SSE] Max reconnect attempts (${MAX_RETRIES}) reached for workflow ${workflowId}. Stopping stream.`);
+        }
       };
     }
 
